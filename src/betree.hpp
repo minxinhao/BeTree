@@ -21,7 +21,7 @@
 #include <cstddef>
 #include <iostream>
 #include <memory>
-
+#include "debug.hpp"
 
 // The three types of upsert.  An UPDATE specifies a value, v, that
 // will be added (using operator+) to the old value associated to some
@@ -66,7 +66,7 @@ bool operator==(const Message<Value> &a, const Message<Value> &b) {
 template<class Key, class Value> class betree {
 private:
     class node;
-    typedef typename std::unique_ptr<node> node_pointer;
+    typedef typename std::shared_ptr<node> node_pointer;
 
     uint64_t min_flush_size;
     uint64_t max_node_size;
@@ -78,13 +78,24 @@ private:
     public:
     child_info(void)
       : child(),
-	child_size(0)
+	    child_size(0)
     {}
     
-    child_info(node_pointer child, uint64_t child_size)
-      : child(child),
+    child_info(node_pointer& child, uint64_t child_size)
+      : child(child.get()),
 	child_size(child_size)
     {}
+
+    const child_info& operator =(const child_info& b){
+        child.reset(b.child.get());
+        child_size = b.child_size;
+        return *this;
+    }
+
+    child_info(const child_info& b){
+        child.reset(b.child.get());
+        child_size = b.child_size;
+    }
 
     node_pointer child;
     uint64_t child_size;
@@ -135,7 +146,7 @@ private:
         // (Same const/non-const templating trick as above)
         template<class OUT, class IN>
         static OUT get_element_begin(IN & elts, const Key &k) {
-        return elts.lower_bound(MessageKey<Key>::range_start(k));
+        return elts.lower_bound(k);
         }
 
         typename message_map::iterator get_element_begin(const Key &k) {
@@ -182,7 +193,7 @@ private:
                 // max element with key <= mkey 
                     iter--;
                 }
-                if (iter == elements.end() || iter->first.key != mkey.key){
+                if (iter == elements.end() || iter->first != mkey){
                     // No key equals to mkey.key in this node
                     if (is_leaf()) {
                         apply(mkey, Message<Value>(INSERT, elt.val));
@@ -191,7 +202,7 @@ private:
                     }
                 }
                 else {
-                    assert(iter != elements.end() && iter->first.key == mkey.key); // There's Message with m.key in elements
+                    assert(iter != elements.end() && iter->first == mkey); // There's Message with m.key in elements
                     if (iter->second.opcode == INSERT) {
                         apply(mkey, Message<Value>(INSERT, elt.val));	  
                     } else {
@@ -225,7 +236,7 @@ private:
                 if (pivot_idx == pivots.end() && elt_idx == elements.end())
                     break;
                 node_pointer new_node(new node);
-                result[pivot_idx != pivots.end() ? pivot_idx->first : elt_idx->first.key] = child_info(new_node,
+                result[pivot_idx != pivots.end() ? pivot_idx->first : elt_idx->first] = child_info(new_node,
                                 new_node->elements.size() + new_node->pivots.size());
                 while(things_moved < (i+1) * things_per_new_leaf &&
                     (pivot_idx != pivots.end() || elt_idx != elements.end())) {
@@ -301,37 +312,40 @@ private:
             }
         }
 
-        void flush_max_message_set(betree &bet){
-            // Find the child with the largest set of messages in our buffer
-            unsigned int max_size = 0;
-            auto child_pivot = pivots.begin();
-            auto next_pivot = pivots.begin();
-            for (auto it = pivots.begin(); it != pivots.end(); ++it) {
-                auto it2 = next(it);
-                auto elt_it = get_element_begin(it); 
-                auto elt_it2 = get_element_begin(it2); 
-                unsigned int dist = distance(elt_it, elt_it2);
-                if (dist > max_size) {
-                    child_pivot = it;
-                    next_pivot = it2;
-                    max_size = dist;
+        void flush_max_message_set(betree &bet,
+            typename pivot_map::iterator& first_pivot_idx){
+            while (elements.size() + pivots.size() >= bet.max_node_size) {
+                // Find the child with the largest set of messages in our buffer
+                unsigned int max_size = 0;
+                auto child_pivot = pivots.begin();
+                auto next_pivot = pivots.begin();
+                for (auto it = pivots.begin(); it != pivots.end(); ++it) {
+                    auto it2 = next(it);
+                    auto elt_it = get_element_begin(it); 
+                    auto elt_it2 = get_element_begin(it2); 
+                    unsigned int dist = distance(elt_it, elt_it2);
+                    if (dist > max_size) {
+                        child_pivot = it;
+                        next_pivot = it2;
+                        max_size = dist;
+                    }
                 }
-            }
-            if (max_size <= bet.min_flush_size)
-                break; // Requires for splits hold.
-            auto elt_child_it = get_element_begin(child_pivot);
-            auto elt_next_it = get_element_begin(next_pivot);
-            message_map child_elts(elt_child_it, elt_next_it);
-            pivot_map new_children = child_pivot->second.child->flush(bet, child_elts);
-            elements.erase(elt_child_it, elt_next_it);
-            if (!new_children.empty()) {
-                pivots.erase(child_pivot);
-                pivots.insert(new_children.begin(), new_children.end());
-            } else {
-                first_pivot_idx->second.child_size =
-                child_pivot->second.child->pivots.size() +
-                child_pivot->second.child->elements.size();
-            }    
+                if (max_size <= bet.min_flush_size)
+                    break; // Requires for splits hold.
+                auto elt_child_it = get_element_begin(child_pivot);
+                auto elt_next_it = get_element_begin(next_pivot);
+                message_map child_elts(elt_child_it, elt_next_it);
+                pivot_map new_children = child_pivot->second.child->flush(bet, child_elts);
+                elements.erase(elt_child_it, elt_next_it);
+                if (!new_children.empty()) {
+                    pivots.erase(child_pivot);
+                    pivots.insert(new_children.begin(), new_children.end());
+                } else {
+                    first_pivot_idx->second.child_size =
+                    child_pivot->second.child->pivots.size() +
+                    child_pivot->second.child->elements.size();
+                } 
+            }   
         }
 
         pivot_map flush(betree &bet, message_map &elts){  
@@ -357,7 +371,7 @@ private:
             Key oldmin = pivots.begin()->first;
             Key newmin = elts.begin()->first;
             if (newmin < oldmin) {
-                pivots[newmin.key] = pivots[oldmin];
+                pivots[newmin] = pivots[oldmin];
                 pivots.erase(oldmin);
             }
 
@@ -368,9 +382,9 @@ private:
                 apply(it->first, it->second);
 
             // Now flush children as necessary
-            while (elements.size() + pivots.size() >= bet.max_node_size) {
-                flush_max_message_set(bet);
-            }
+            auto first_pivot_idx = get_pivot(elts.begin()->first);
+            flush_max_message_set(bet,first_pivot_idx);
+            
 
             // We have too many pivots to efficiently flush stuff down, so split
             if (elements.size() + pivots.size() > bet.max_node_size) {
@@ -387,7 +401,7 @@ private:
             debug(std::cout << "Querying " << this << std::endl);
             if (is_leaf()) {
                 auto it = elements.lower_bound(k);
-                if (it != elements.end() && it->first.key == k) {
+                if (it != elements.end() && it->first == k) {
                     assert(it->second.opcode == INSERT);
                     return it->second.val;
                 } else {
@@ -421,8 +435,8 @@ private:
 
         std::pair<Key, Message<Value> >
         get_next_message_from_children(const Key *mkey) const {
-        if (mkey && *mkey < pivots.begin()->first)
-            auto it = mkey ? get_pivot(mkey) : pivots.begin();
+            auto it = (mkey && pivots.begin()->first < *mkey)
+            ? get_pivot(*mkey): pivots.begin();
             while (it != pivots.end()) {
                 try {
                     return it->second.child->get_next_message(mkey);
@@ -475,7 +489,7 @@ public:
     // occurs.
     void upsert(int opcode, Key k, Value v){
         message_map tmp;
-        tmp[Key] = Message<Value>(opcode, v);
+        tmp[k] = Message<Value>(opcode, v);
         pivot_map new_nodes = root->flush(*this, tmp);
         if (new_nodes.size() > 0) {
             root.reset(new node);
@@ -507,8 +521,7 @@ public:
         try {
             current = root->get_next_message(NULL);
             do { 
-                std::cout << current.first.key       << " "
-                    << current.first.timestamp << " "
+                std::cout << current.first     << " "
                     << current.second.opcode   << " "
                     << current.second.val      << std::endl;
                 current = root->get_next_message(&current.first);
@@ -534,7 +547,7 @@ public:
             second()
         {}
 
-        iterator(const betree &bet, const MessageKey<Key> *mkey)
+        iterator(const betree &bet, const Key *mkey)
         : bet(bet),
             position(),	
             is_valid(false),

@@ -65,6 +65,8 @@
         "string": "cpp",
         "string_view": "cpp",
         "system_error": "cpp",
-        "unordered_map": "cpp"
+        "unordered_map": "cpp",
+        "*.tcc": "cpp",
+        "fstream": "cpp"
     }
 }

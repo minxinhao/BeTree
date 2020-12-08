@@ -1,4 +1,4 @@
-#include "./src/betree.hpp"
+#include "../src/betree.hpp"
 #include <unistd.h>
 #include <string>
 #include <sys/types.h>
