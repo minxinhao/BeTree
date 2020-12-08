@@ -67,6 +67,10 @@
         "system_error": "cpp",
         "unordered_map": "cpp",
         "*.tcc": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "clocale": "cpp",
+        "deque": "cpp",
+        "numeric": "cpp",
+        "random": "cpp"
     }
 }
