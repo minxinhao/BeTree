@@ -1,0 +1,77 @@
+A in-memory edition of B^e-tree Implementation.Transplanted oscarlab's BeTree implementation. 
+In the original implementation((https:github.com/oscarlab/Be-Tree)), data structure persistence was considered, and there was a large performance loss. In the meanwhile, there are some unnecessary or incomprehensible design(such as addable value ) and bugs(such as no memory collection for betree node and related b^e-tree destructor), I edit them in this transplantation. 
+A version of pure in-memory implementation was simply transplanted, and the backing_store and swap_space designs were removed.
+
+Code by Xinhao Min <triky.min@gmail.com>
+
+A B^-e-tree is an sorted index data structure with an interface similar to a B-tree.  It stores a mapping from keys to values, supporting
+inserts, queries, deletes, updates, and efficient iteration.  
+The design goal of a B^e-tree is that the read performance is close to B-Tree and the write performance is several orders of magnitude higher than B-Tree.
+
+This distribution includes:
+- the in-memory and fixed edition of B^e-tree implementation
+- a simple hello_world program that shows how to use this implementation and a test program that checks correctness
+- db_bench test for much more comprehensive performance testing
+
+BUILDING AND RUNNING THE TEST PROGRAM
+-------------------------------------
+
+To build, run
+```shell
+    /// to run hello_world
+    $ make hello_world
+    $ ./hello_world
+
+    /// to run correctness test
+    $ make test
+    $ ./test
+
+    /// to run db_bench
+    $ make db_bench
+    $ ./db_bench
+```
+The hello_world simply insert serveral key/value in betree and take out them to output.
+The test takes about a minute to run and should print "Test PASSED".
+The test performs a random sequence of operations on a betree and on
+an STL map, verifying that it always gets the same result from each
+data structure. If it ever finds a discrepancy, it will abort with an
+assertion failure.
+The db_bench perform inserts、query、scan and delete operation under random/sequential workload with same key-value-format in leveldb and rocksdb.It will print num_ops,time consuming and IOPS for each opertions.
+
+The code has been tested on a Debian 8.2 Linux installation with
+- g++ 4.9.2
+- GNU make 4.0
+- libstdc++ 6.0.20
+- libc 2.19
+
+If you have trouble compiling or running the test on other systems,
+please submit bug reports to triky.min@gmail.com.  Patches are
+definitely appreciated.
+
+
+GUIDE TO THE CODE
+-----------------
+
+src/betree.hpp:The core of the betree implementation.  This class       
+            handles flushing messages down the tree, splitting nodes,
+            performing inserts, queries, etc, and provides an iterator
+            for scanning key/value pairs in the tree.
+
+test/hello_world.cpp: Samole code for demonstrating how to construct and use a betree.
+
+test/test.cpp: Correctness test program.
+
+test/db_bench.cpp: Transplanted db_be¡nch in leveldb.
+
+INTERESTING PROJECTS AND TODOS
+------------------------------
+
+- Transplanted YCSB benchmark for this implementation.
+
+- Add support for other Key/Value type 
+
+- Add concurrent access supporting.
+
+- Implemente subsequent operation like sub-tree-split in related article.
+
+- Add persistence design.
