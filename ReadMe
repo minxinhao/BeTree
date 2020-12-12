@@ -23,8 +23,11 @@ To build, run
     $ ./hello_world
 
     /// to run correctness test
-    $ make test
-    $ ./test
+    $ make full_test
+    $ ./full_test -m test -t 100000 -k 10000
+    $ ./full_test -m benchmark-upserts -t 100000 -k 10000
+    $ ./full_test -m benchmark-queries -t 100000 -k 10000
+
 
     /// to run db_bench
     $ make db_bench

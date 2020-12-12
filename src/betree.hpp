@@ -56,12 +56,14 @@ bool operator==(const Message<Value> &a, const Message<Value> &b) {
 
 // Measured in messages.
 #define DEFAULT_MAX_NODE_SIZE (1ULL<<18)
+// #define DEFAULT_MAX_NODE_SIZE (3)
 
 // TODO:Edit logic in MIN_FLUSH_SIZE
 // The minimum number of messages that we will flush to an out-of-cache node.
 // Note: we will flush even a single element to a child that is already dirty.
 // Note: we will flush MIN_FLUSH_SIZE/2 items to a clean in-memory child.
 #define DEFAULT_MIN_FLUSH_SIZE (DEFAULT_MAX_NODE_SIZE / 16ULL)
+// #define DEFAULT_MIN_FLUSH_SIZE 1
 
 template<class Key, class Value> class betree {
 private:
@@ -82,18 +84,18 @@ private:
     {}
     
     child_info(node_pointer& child, uint64_t child_size)
-      : child(child.get()),
+      : child(child),
 	child_size(child_size)
     {}
 
     const child_info& operator =(const child_info& b){
-        child.reset(b.child.get());
+        child = b.child; 
         child_size = b.child_size;
         return *this;
     }
 
     child_info(const child_info& b){
-        child.reset(b.child.get());
+        child = b.child;
         child_size = b.child_size;
     }
 
@@ -445,11 +447,14 @@ private:
             }
             throw std::out_of_range("No more messages in any children");
         }
-
+        
         std::pair<Key, Message<Value> >
         get_next_message(const Key *mkey) const {
             auto it = mkey ? elements.upper_bound(*mkey) : elements.begin();
-
+            // if (it == elements.end()){
+            //     printf("get_next_message: key:%lu\n",*mkey);
+            //     show_elements();
+            // }
             if (is_leaf()) {
                 if (it == elements.end())
                     throw std::out_of_range("No more messages in sub-tree");
@@ -467,6 +472,15 @@ private:
                     return std::make_pair(it->first, it->second);
             }catch (std::out_of_range e) {
                 return std::make_pair(it->first, it->second);	
+            }
+        }
+
+        void show_elements()const{
+            printf("show_elements\n");
+            auto it = elements.begin();
+            while(it!=elements.end()){
+                printf("key %lu \nvalue %s\n",it->first,it->second.val.c_str());
+                it++;
             }
         }
     };
@@ -620,7 +634,7 @@ public:
     }
 
     iterator lower_bound(Key key) const {
-        return iterator(*this, key);
+        return iterator(*this, &key);
     }
 
     

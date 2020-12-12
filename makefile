@@ -6,8 +6,8 @@ CC=g++
 hello_world:src/betree.hpp test/hello_world.cpp
 	$(CC) src/betree.hpp test/hello_world.cpp -o hello_world
 
-hello_world:src/betree.hpp test/test.cpp
-	$(CC) src/betree.hpp test/test.cpp -o test
+full_test:src/betree.hpp test/full_test.cpp
+	$(CC) src/betree.hpp test/full_test.cpp -o full_test
 
 clean:
-	$(RM) *.o test
+	$(RM) *.o *.exe
